@@ -1,0 +1,9 @@
+---
+title: "Projet Data"
+format: html
+---
+
+```{r}
+here::i_am("Projet_data.Rproj")
+```
+
