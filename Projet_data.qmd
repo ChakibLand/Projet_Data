@@ -4,6 +4,121 @@ format: html
 ---
 
 ```{r}
+#| message: false
 here::i_am("Projet_data.Rproj")
+library(here)
+library(dplyr)
+library(ggplot2)
 ```
+
+## Lien vers le projet 
+https://github.com/ChakibLand/Projet_Data
+
+
+
+## Introduction 
+
+Dans le débat public, le vote d'extrême droite est souvent associé à la présence d'immigrés. Pourtant, plusieurs travaux suggèrent que ce vote n'est pas forcément le plus élevé là où les immigrés sont les plus nombreux. Il serait plutôt fort dans des communes qui en comptent peu, mais qui sont proches de territoires où ils sont nombreux. C'est ce qu'on appelle l'hypothèse de l'**« effet de halo »**.
+
+À l'approche de l'élection présidentielle de 2027, nous proposons de confronter cette hypothèse aux données, à l'échelle des communes françaises. Notre question de recherche est la suivante :
+
+**Quel est le lien entre la part d'immigrés d'une commune et le vote pour les candidats d'extrême droite (Marine Le Pen et Éric Zemmour) au premier tour de l'élection présidentielle de 2022 ?**
+
+Nous chercherons également à savoir si ce lien varie selon :
+
+- la part d'immigrés du département dans lequel se trouve la commune, pour approcher l'effet de halo ;
+- la taille de la commune (village, ville moyenne, grande ville).
+
+Enfin, le vote d'extrême droite dépend aussi de la composition sociale des communes : il est notamment plus élevé chez les ouvriers. Pour ne pas attribuer à l'immigration un effet qui relèverait en réalité de facteurs socio-économiques, nous utiliserons la **catégorie socioprofessionnelle** des habitants (en particulier la part d'ouvriers) comme variable de contrôle.
+
+Pour répondre à ces questions, nous croisons trois fichiers issus de deux sources : les résultats électoraux publiés par le Ministère de l'Intérieur, et deux tableaux du recensement de la population de l'INSEE (immigration et catégories socioprofessionnelles).
+
+
+
+
+## Import des données
+
+### 1. Résultats du premier tour de l'élection présidentielle 2022
+
+**Source.** Ces données sont publiées par le Ministère de l'Intérieur sur la plateforme ouverte des données publiques data.gouv.fr :
+<https://www.data.gouv.fr/datasets/election-presidentielle-des-10-et-24-avril-2022-resultats-definitifs-du-1er-tour>
+
+Elles contiennent les résultats définitifs du premier tour de l'élection présidentielle du 10 avril 2022. Nous utilisons le fichier au niveau des **communes** : chaque ligne correspond à une commune et donne le nombre d'inscrits, de votants, de bulletins blancs et nuls, de suffrages exprimés, ainsi que les voix obtenues par chacun des 12 candidats.
+
+Les résultats proviennent des procès-verbaux établis dans chaque bureau de vote après le dépouillement. Ils sont réunis au niveau de la commune, transmis à la préfecture, puis centralisés par le Ministère de l'Intérieur ([description du circuit de transmission](https://questions.assemblee-nationale.fr/dyn/14/questions/QANR5L14QE5162.pdf)).
+
+Le fichier est distribué au format `.txt` (valeurs séparées par des points-virgules). Nous l'avons renommé `resultat.csv` sans modifier son contenu.
+
+En ouvrant le fichier, on constate que la plupart des colonnes n'ont pas de nom : l'en-tête ne nomme que les colonnes du premier candidat, alors que chaque ligne contient les résultats des 12 candidats à la suite. Une importation directe avec `read.csv()` échoue donc. Nous devons créer nous-mêmes les noms de ces colonnes. On pourrait utiliser header = FAlSE mais on melangerait du texte et des nombres et R lierait toutes nos colonnes comme du texte. 
+
+
+```{r}
+# Lecture de la première ligne du fichier (l'en-tête), découpée à chaque ";"
+entete <- readLines(here("data","resultats.csv"), n=1, encoding = "latin1")
+
+# On obtient une longue chaine de caractère, on découpe apres chaque ; 
+entete <- strsplit(entete,";")[[1]]
+
+```
+L'en-tête contient `{r} length(entete)` noms. Les 19 premiers décrivent la commune et le scrutin (département, commune, inscrits, votants, exprimés…), les 7 suivants décrivent un candidat (numéro de panneau, sexe, nom, prénom, voix, pourcentage des inscrits et des exprimés).
+
+Chaque candidat ayant les mêmes 7 colonnes, nous répétons ces noms 12 fois, une fois par candidat, en ajoutant le numéro du candidat pour les distinguer (`Voix_1`, `Voix_2`…).
+
+```{r}
+# On recupere les noms des communes et ceux des candidats 
+noms_commune <- entete[1:19]
+noms_candidat <- entete[20:26]
+
+```
+
+```{r}
+# Les 7 noms répétés 12 fois (un bloc par candidat)
+noms_repetes <- rep(noms_candidat, times = 12)
+# Le numéro du candidat, répété 7 fois chacun 
+numeros <- rep(1:12, each = 7)
+```
+
+```{r}
+noms_tous_candidats <- paste0(noms_repetes, "_", numeros)
+# Noms de la commune suivis des noms des 12 candidats
+noms <- c(noms_commune, noms_tous_candidats)
+length(noms)
+```
+Nous obtenons ainsi `{r} length(noms)` noms de colonnes, ce qui correspond bien à 19 colonnes pour la commune et 7 pour chacun des 12 candidats.
+
+On peut finalement importer la base : 
+
+```{r}
+# Import des données en utilisant nos propres noms de colonnes
+resultat <- read.csv(
+  file = here("data", "resultats.csv"),
+  header = FALSE,          # on n'utilise pas l'en-tête incomplet du fichier
+  skip = 1,                # on saute donc la première ligne
+  col.names = noms,        # on donne nos 103 noms
+  sep = ";",
+  dec = ",",               # décimales écrites avec une virgule
+  fileEncoding = "latin1"  # pour les accents
+)
+```
+
+Nous obtenons ainsi `{r} length(noms)` noms de colonnes, ce qui correspond bien à 19 colonnes pour la commune et 7 pour chacun des 12 candidats.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
