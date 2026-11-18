@@ -104,21 +104,44 @@ resultat <- read.csv(
 Nous obtenons ainsi `{r} length(noms)` noms de colonnes, ce qui correspond bien à 19 colonnes pour la commune et 7 pour chacun des 12 candidats.
 
 
+### 2. Population par situation quant à l'immigration (INSEE, IMG1A)
+
+Ce tableau vient du recensement de 2021, publié par l'INSEE dans « Immigration en 2021 » : <https://www.insee.fr/fr/statistiques/8202714>
+
+Pour chaque commune, on y trouve la population par sexe, par âge et selon qu'elle est immigrée ou non. Pour l'INSEE, un immigré est une personne née étrangère à l'étranger et qui vit en France. C'est à partir de ce tableau qu'on calcule notre variable principale : la part d'immigrés dans chaque commune.
+
+Le recensement se fait chaque année par enquêtes. Les petites communes sont recensées en entier une fois tous les cinq ans, les grandes sur un échantillon chaque année. Les chiffres « 2021 » regroupent donc cinq années d'enquêtes. Ce sont des estimations, ce qui explique les effectifs avec des décimales. La méthodologie est détaillée ici : <https://www.insee.fr/fr/information/4796233>
+
+Le fichier s'importe sans difficulté, néanmoins le seul soucis est qu'il faut lire `CODGEO` comme du texte. Sinon R enlève le zéro du début (`01001` devient `1001`) et on ne pourra plus relier les bases entre elles.
 
 
+```{r}
+# Import du tableau IMG1A (séparateur ";", décimales avec un point)
+immi <- read.csv(
+  file = here("data", "IMG1A_2021.csv"), sep = ";",
+  colClasses = c(CODGEO = "character")  # garder le code commune en texte
+)
+```
+
+La base contient `{r} nrow(immi)` lignes et `{r} ncol(immi)` colonnes. Elle n'a pas une ligne par commune, en effet chaque ligne correspond à un groupe de personnes d'une commune, défini par une tranche d'âge (`AGE4`), une situation quant à l'immigration (`IMMI` : 1 = immigré, 2 = non immigré) et un sexe (`SEXE`). La colonne `NB` donne l'effectif estimé de ce groupe. 
 
 
+### 3. Population par catégorie socioprofessionnelle (INSEE, MG3A)
+
+Ce tableau vient aussi durecensement de la population 2021, publié par l'INSEE sur la même page que IMG1A : <https://www.insee.fr/fr/statistiques/8202714>
+
+Il donne, pour chaque commune, la population de 15 ans ou plus selon le sexe, la situation quant à l'immigration et la catégorie socioprofessionnelle (agriculteurs, cadres, ouvriers, retraités…). Il nous servira pour notre variable de controle. 
+Même méthode que IMG1A (recensement par enquêtes annuelles, effectifs estimés). Comme pour IMG1A, la colonne `CODGEO` est lue comme du texte.
 
 
+```{r}
+# Import du tableau IMG3A (même format que IMG1A)
+csp <- read.csv(
+  file = here("data", "MG3A_2021.csv"), sep = ";",
+  colClasses = c(CODGEO = "character")  # garder le code commune en texte
+)
+```
 
-
-
-
-
-
-
-
-
-
+La base contient `{r} nrow(csp)` lignes et `{r} ncol(csp)` colonnes. Comme IMG1A, une commune occupe plusieurs lignes : chacune correspond à un groupe défini par le sexe, la situation quant à l'immigration et la catégorie socioprofessionnelle, avec son effectif estimé dans la colonne `NB`.
 
 
