@@ -9,6 +9,7 @@ here::i_am("Projet_data.Rproj")
 library(here)
 library(dplyr)
 library(ggplot2)
+library(knitr)
 ```
 
 ## Lien vers le projet 
@@ -47,9 +48,9 @@ Elles contiennent les résultats définitifs du premier tour de l'élection pré
 
 Les résultats proviennent des procès-verbaux établis dans chaque bureau de vote après le dépouillement. Ils sont réunis au niveau de la commune, transmis à la préfecture, puis centralisés par le Ministère de l'Intérieur ([description du circuit de transmission](https://questions.assemblee-nationale.fr/dyn/14/questions/QANR5L14QE5162.pdf)).
 
-Le fichier est distribué au format `.txt` (valeurs séparées par des points-virgules). Nous l'avons renommé `resultat.csv` sans modifier son contenu.
+Le fichier est distribué au format `.txt` (valeurs séparées par des points-virgules). Nous l'avons renommé `resultats.csv` sans modifier son contenu.
 
-En ouvrant le fichier, on constate que la plupart des colonnes n'ont pas de nom : l'en-tête ne nomme que les colonnes du premier candidat, alors que chaque ligne contient les résultats des 12 candidats à la suite. Une importation directe avec `read.csv()` échoue donc. Nous devons créer nous-mêmes les noms de ces colonnes. On pourrait utiliser header = FAlSE mais on melangerait du texte et des nombres et R lierait toutes nos colonnes comme du texte. 
+En ouvrant le fichier, on constate que la plupart des colonnes n'ont pas de nom : l'en-tête ne nomme que les colonnes du premier candidat, alors que chaque ligne contient les résultats des 12 candidats à la suite. Une importation directe avec `read.csv()` échoue donc. Nous devons créer nous-mêmes les noms de ces colonnes. On pourrait utiliser header = FAlSE mais on melangerait du texte et des nombres et R lirait toutes nos colonnes comme du texte. 
 
 
 ```{r}
@@ -82,7 +83,6 @@ numeros <- rep(1:12, each = 7)
 noms_tous_candidats <- paste0(noms_repetes, "_", numeros)
 # Noms de la commune suivis des noms des 12 candidats
 noms <- c(noms_commune, noms_tous_candidats)
-length(noms)
 ```
 Nous obtenons ainsi `{r} length(noms)` noms de colonnes, ce qui correspond bien à 19 colonnes pour la commune et 7 pour chacun des 12 candidats.
 
@@ -128,7 +128,7 @@ La base contient `{r} nrow(immi)` lignes et `{r} ncol(immi)` colonnes. Elle n'a 
 
 ### 3. Population par catégorie socioprofessionnelle (INSEE, MG3A)
 
-Ce tableau vient aussi durecensement de la population 2021, publié par l'INSEE sur la même page que IMG1A : <https://www.insee.fr/fr/statistiques/8202714>
+Ce tableau vient aussi du recensement de la population 2021, publié par l'INSEE sur la même page que IMG1A : <https://www.insee.fr/fr/statistiques/8202714>
 
 Il donne, pour chaque commune, la population de 15 ans ou plus selon le sexe, la situation quant à l'immigration et la catégorie socioprofessionnelle (agriculteurs, cadres, ouvriers, retraités…). Il nous servira pour notre variable de controle. 
 Même méthode que IMG1A (recensement par enquêtes annuelles, effectifs estimés). Comme pour IMG1A, la colonne `CODGEO` est lue comme du texte.
@@ -143,5 +143,98 @@ csp <- read.csv(
 ```
 
 La base contient `{r} nrow(csp)` lignes et `{r} ncol(csp)` colonnes. Comme IMG1A, une commune occupe plusieurs lignes : chacune correspond à un groupe défini par le sexe, la situation quant à l'immigration et la catégorie socioprofessionnelle, avec son effectif estimé dans la colonne `NB`.
+
+
+
+## Description des fichiers 
+
+Réalisons un tableau par base de données résumant les informations importantes, tel que le nombre de ligne et de colonnes. 
+
+
+### Résultats électoraux
+
+```{r}
+nb_lignes_res <- nrow(resultat)
+nb_colonnes_res <- ncol(resultat)
+nb_dep_res <- n_distinct(resultat[,1]) # nombre de département différent 
+
+# Sous forme de tableau, on utilise la fonction kable
+
+kable(data.frame(
+  Information = c("Nombre de lignes", "Nombre de colonnes", "Nombre de départements"),
+  Valeur = c(nb_lignes_res,nb_colonnes_res,nb_dep_res)
+))
+```
+
+Chaque ligne correspond à une commune. Le grand nombre de colonnes s'explique par la présence des 12 candidats, avec 7 colonnes chacun. On compte `{r} nb_dep_res` départements, car le fichier inclut, en plus de la métropole, l'outre-mer et d'autres zones de vote hors métropole.
+
+### Population par situation quant à l'immigration 
+
+```{r}
+
+nb_lignes_immi <- nrow(immi)
+nb_colonnes_immi <- ncol(immi)
+nb_com_immi <- n_distinct(immi$CODGEO) # nombre de commune différentes 
+
+# Sous forme de tableau, on utilise la fonction kable
+
+kable(data.frame(
+  Information = c("Nombre de lignes", "Nombre de colonnes", "Nombre de communes"),
+  Valeur = c(nb_lignes_immi,nb_colonnes_immi,nb_com_immi)
+))
+
+```
+Le fichier compte beaucoup plus de lignes que de communes, car chaque commune est découpée en plusieurs groupes selon l'âge, la situation quant à l'immigration et le sexe.
+
+###  Population par catégorie socioprofessionnelle
+
+```{r}
+nb_lignes_csp <- nrow(csp)
+nb_colonnes_csp <- ncol(csp)
+nb_com_csp <- n_distinct(csp$CODGEO) # nombre de commune différentes 
+
+# Sous forme de tableau, on utilise la fonction kable
+
+kable(data.frame(
+  Information = c("Nombre de lignes", "Nombre de colonnes", "Nombre de communes"),
+  Valeur = c(nb_lignes_csp,nb_colonnes_csp,nb_com_csp)
+))
+```
+Comme pour IMG1A, chaque commune occupe plusieurs lignes, une par combinaison de catégorie socioprofessionnelle, de situation quant à l'immigration et de sexe. Les deux tableaux de l'INSEE couvrent exactement le même nombre de communes (`{r} nb_com_csp`).
+
+
+On remarque que la base électorale compte `{r} nb_lignes_res` communes, contre `{r} nb_com_immi` dans les données de l'INSEE, soit une différence de `{r} nb_lignes_res - nb_com_immi` communes. Cet écart s'explique notamment par les fusions de communes et par les zones de vote absentes du recensement (comme les Français de l'étranger). Il faudra que l'on prenne cela en compte pour la jointure des bases de données. 
+
+
+
+## Description des variables importantes 
+
+On a décidé de conserver qu'une partie des variables de chaque ficher, voici une brève description pour chacune d'entre elles. 
+
+
+### Résultats électoraux
+
+- **`Code.du.département`** et **`Code.de.la.commune`** : La base contenant les résultats electoraux dispose d'une colonne code de departement et un code de la commune. Une fois les deux réunis on obtient le code INSEE de la commune, ce qui nous sera utile pour relier aux bases de données de l'INSEE. 
+- **`Inscrits`** : Correspond au nombre de personnes inscrites sur les listes électorales. Il nous servira à mesurer la taille de la commune.
+- **`Exprimés`** : Correspond au nombre de votes valables, c'est-à-dire hors bulletins blancs et nuls. 
+- **`Nom_5`** et **`Nom_6`** : Ce sont les noms des candidats 5 et 6, Marine Le Pen et Éric Zemmour, les deux candidats d'extrême droite étudiés que l'on a décidé de conserver. 
+- **`Voix_5`** et **`Voix_6`** : Correspond au nombre de voix obtenues par ces deux candidats dans la commune.
+- **`X..Voix.Exp_5`** et **`X..Voix.Exp_6`** : Correspond au score de chaque candidat en pourcentage des suffrages exprimés. En additionnant les deux, on obtient ce qui nous intéresse : le vote d'extrême droite.
+
+### Immigration (IMG1A)
+
+- **`CODGEO`** : Correspond au code INSEE dont on parlait et qui est indispensable pour la jointure de nos bases. 
+- **`IMMI`** : Situation quant à l'immigration (1 = immigré, 2 = non immigré).
+- **`NB`** : Correspond au nombre estimé de personnes dans le groupe décrit par la ligne. Si l'on prend la somme `NB` des immigrés et que l'on divise par la somme de tous les `NB` on obtient la part d'immigrés
+
+### Catégories socioprofessionnelles (IMG3A)
+
+- **`CODGEO`** : Code INSEE de la commune, comme dans IMG1A.
+- **`CS1_8`** : Catégorie socioprofessionnelle en 8 postes avec le code 6 correspondant aux ouvriers.
+- **`NB`** : L'effectif estimé du groupe comme dans IMG1A
+
+
+
+
 
 
