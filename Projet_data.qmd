@@ -10,6 +10,7 @@ library(here)
 library(dplyr)
 library(ggplot2)
 library(knitr)
+library(stringr)
 ```
 
 ## Lien vers le projet 
@@ -19,7 +20,7 @@ https://github.com/ChakibLand/Projet_Data
 
 ## Introduction 
 
-Dans le débat public, le vote d'extrême droite est souvent associé à la présence d'immigrés. Pourtant, plusieurs travaux suggèrent que ce vote n'est pas forcément le plus élevé là où les immigrés sont les plus nombreux. Il serait plutôt fort dans des communes qui en comptent peu, mais qui sont proches de territoires où ils sont nombreux. C'est ce qu'on appelle l'hypothèse de l'**« effet de halo »**.
+Dans le débat public, le vote d'extrême droite est souvent associé à la présence d'immigrés. Pourtant, plusieurs travaux suggèrent que ce vote n'est pas forcément le plus élevé là où les immigrés sont les plus nombreux. Il serait plutôt fort dans des communes qui en comptent peu mais qui sont proches de territoires où ils sont nombreux. C'est ce qu'on appelle l'hypothèse de l'**« effet de halo »**.
 
 À l'approche de l'élection présidentielle de 2027, nous proposons de confronter cette hypothèse aux données, à l'échelle des communes françaises. Notre question de recherche est la suivante :
 
@@ -44,7 +45,7 @@ Pour répondre à ces questions, nous croisons trois fichiers issus de deux sour
 **Source.** Ces données sont publiées par le Ministère de l'Intérieur sur la plateforme ouverte des données publiques data.gouv.fr :
 <https://www.data.gouv.fr/datasets/election-presidentielle-des-10-et-24-avril-2022-resultats-definitifs-du-1er-tour>
 
-Elles contiennent les résultats définitifs du premier tour de l'élection présidentielle du 10 avril 2022. Nous utilisons le fichier au niveau des **communes** : chaque ligne correspond à une commune et donne le nombre d'inscrits, de votants, de bulletins blancs et nuls, de suffrages exprimés, ainsi que les voix obtenues par chacun des 12 candidats.
+Elles contiennent les résultats définitifs du premier tour de l'élection présidentielle du 10 avril 2022. Nous utilisons le fichier au niveau des **communes** : chaque ligne correspond à une commune et donne le nombre d'inscrits, de votants, de bulletins blancs et nuls, de suffrages exprimés ainsi que les voix obtenues par chacun des 12 candidats.
 
 Les résultats proviennent des procès-verbaux établis dans chaque bureau de vote après le dépouillement. Ils sont réunis au niveau de la commune, transmis à la préfecture, puis centralisés par le Ministère de l'Intérieur ([description du circuit de transmission](https://questions.assemblee-nationale.fr/dyn/14/questions/QANR5L14QE5162.pdf)).
 
@@ -235,6 +236,105 @@ On a décidé de conserver qu'une partie des variables de chaque ficher, voici u
 
 
 
+## Nettoyage et jointure des données
 
+### Résultats électoraux
+
+Pour relier la base électorale aux données de l'INSEE, nous construisons le code INSEE de chaque commune en collant le code du département (2 caractères) et le code de la commune (3 caractères). Le code commune ayant été lu comme un nombre, les zéros initiaux ont disparu (`001`⁠ est devenu `1`⁠) : nous les rajoutons avant de coller les deux codes.
+
+```{r}
+resultat <- resultat |>
+  mutate(
+    # On complete le code commune avec des 0 pour qu'il fasse 3 caractères
+    code_commune = str_pad(Code.de.la.commune, width = 3, pad = "0"),
+    # Colle département et commune : "01" + "001" -> "01001"
+    CODGEO = paste0(Code.du.département, code_commune)
+  )
+```
+
+À présent en utilisant mutate, on doit calculer notre variable correspondant au vote de l'extrème droite, en sommant les votes pour Le Pen et Zemmour puis en rapportant aux nombres de suffrages exprimés. On conserve aussi uniquement les colonnes qui nous servierons pour la suite. 
+
+```{r}
+vote <- resultat |> 
+  mutate(
+    voix_ed = Voix_5 + Voix_6,
+    part_ed = voix_ed / Exprimés*100
+  ) |> 
+  # On conserve que les colonnes utiles pour la suite 
+  select(CODGEO, Libellé.de.la.commune, Inscrits, Exprimés,
+         Voix_5, Voix_6, voix_ed, part_ed)
+```
+
+```{r}
+summary(vote$part_ed)
+```
+
+On remarque qu'il y a 16 valeurs manquantes, correspondant aux communes sans aucun suffrage exprimé. 
+
+```{r}
+vote <- resultat |> 
+  # On retire les communes sans aucun suffrage exprimé 
+  filter(Exprimés > 0) |> 
+  mutate(
+    voix_ed = Voix_5 + Voix_6,
+    part_ed = voix_ed / Exprimés*100
+  ) |> 
+  # On conserve que les colonnes utiles pour la suite 
+  select(CODGEO, Libellé.de.la.commune, Inscrits, Exprimés,
+         Voix_5, Voix_6, voix_ed, part_ed)
+```
+
+Une fois ces lignes retirées La base `vote`⁠ compte finalement `{r} nrow(vote)`⁠ communes.
+
+
+### Immigration (IMG1A)
+
+Dans IMG1A, chaque commune est reparti sur plusieurs lignes, on souhaiterait avoir une ligne par commune avec la population totale, le nombre d'immigrés et la part d'immigrés. 
+Le fichier contient à la fois les communes (`COM`⁠) et les arrondissements municipaux de Paris, Lyon et Marseille (`ARM`), nous ne gardons que les lignes `COM`. 
+
+```{r}
+immi_commune <- immi |>
+  # On ne garde que les communes (pas les arrondissements)
+  filter(NIVGEO == "COM") |>
+  summarise(
+    # Population totale : somme de tous les groupes de la commune
+    population = sum(NB),
+    # Nombre d'immigrés : somme des groupes où IMMI = 1
+    nb_immigres = sum(NB[IMMI == 1]),
+    .by = c(CODGEO, LIBGEO)
+  ) |>
+  # Part d'immigrés dans la commune, en %
+    mutate(part_immi = nb_immigres / population * 100) |>
+  # On retire les communes sans population connue
+  filter(!is.na(part_immi))
+```
+
+Neuf communes n'ont pas de part d'immigrés calculable. Six d'entre elles sont les « villages morts pour la France » de la Meuse, détruits pendant la bataille de Verdun et sans aucun habitant. Les trois autres ont des effectifs manquants dans le fichier de l'INSEE, probablement à cause d'un changement de géographie communale. Donc, on les retire.  
+
+Quelques communes ont une part d'immigrés supérieure à 50 %. Ces valeurs s'expliquent par des situations particulières (communes de Guyane, communes frontalières de la Belgique) ou par une population très faible, celle-ci on les conserve. 
+
+
+### Catégories socioprofessionnelles (IMG3A)
+
+Dans IMG3A, chaque commune occupe plusieurs lignes. Nous les regroupons pour obtenir une ligne par commune, comme pour IMG1A.
+
+Nous retenons la part d'ouvriers (code 6) parmi les 15 ans ou plus comme variable de contrôle. Les ouvriers votent davantage pour l'extrême droite et peuvent être plus nombreux là où vivent beaucoup d'immigrés (anciens bassins industriels, par exemple). Contrôler cette variable évite d'attribuer à l'immigration un effet qui relève de la composition sociale de la commune.
+
+```{r}
+csp_commune <- csp |>
+  # On ne garde que les communes (pas les arrondissements)
+  filter(NIVGEO == "COM") |>
+  summarise(
+    # Population de 15 ans ou plus : somme de tous les groupes de la commune
+    population_15 = sum(NB),
+    # Nombre d'ouvriers : somme des groupes où CS1_8 = 6
+    nb_ouvriers = sum(NB[CS1_8 == 6]),
+    .by = CODGEO
+  ) |>
+  # Part d'ouvriers parmi les 15 ans ou plus, en %
+  mutate(part_ouvriers = nb_ouvriers / population_15 * 100) |>
+  # On retire les communes sans population connue
+  filter(!is.na(part_ouvriers))
+```
 
 
